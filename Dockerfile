@@ -1,13 +1,13 @@
-FROM node:22
+FROM node:22-alpine
 
 WORKDIR /app
 
 COPY package*.json ./
-
-RUN npm install
+RUN npm ci --omit=dev
 
 COPY . .
+RUN chmod +x docker-entrypoint.sh
 
 EXPOSE 5001
 
-CMD ["npm", "run", "dev"]
+CMD ["./docker-entrypoint.sh"]

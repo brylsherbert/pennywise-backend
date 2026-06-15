@@ -4,12 +4,11 @@ services:
     ports:
       - "5001:5001"
     environment:
-      DATABASE_URL: postgres://postgres:admin@db:5432/backend-db
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     depends_on:
       - db
     restart: always
-    volumes:
-      - .:/app
 
   db:
     image: postgres:16
