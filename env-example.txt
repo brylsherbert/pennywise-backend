@@ -1,0 +1,9 @@
+PORT=1234
+POSTGRES_USER=dummy_user
+POSTGRES_PASSWORD=dummy_password
+POSTGRES_DB=dummy_db
+POSTGRES_HOST=dummy_host
+POSTGRES_PORT=2345
+JWT_SECRET_KEY=dummy_secret_key
+JWT_EXPIRES_IN=1d
+NODE_ENV=development

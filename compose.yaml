@@ -1,0 +1,27 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "5001:5001"
+    environment:
+      DATABASE_URL: postgres://postgres:admin@db:5432/backend-db
+    depends_on:
+      - db
+    restart: always
+    volumes:
+      - .:/app
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+volumes:
+  postgres_data:
