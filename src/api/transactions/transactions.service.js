@@ -191,7 +191,7 @@ export const createTransaction = async (payload, loggedInUser) =>
     type,
     amount,
     title,
-    transaction_date,
+    transaction_date: transaction_date ? transaction_date : new Date().toISOString(),
   };
 
   return await withTransaction((client) => handleCreateTransactionWithAccount(transactionPayload, transcationHelpers, client));
