@@ -12,7 +12,7 @@ export const getCurrentUser = async (userId) =>
     throwErrorWithMessage("Error fetching current user. Please try again.");
   }
 
-  const { password, created_at, updated_at, ...user } = existingUser;
+  const { password, ...user } = existingUser;
 
   return {
     data: user,
@@ -28,7 +28,6 @@ export const updateCurrentUser = async (body, loggedInUser, res) =>
   }
 
   const { username, password, confirmPassword } = body;
-  console.log("🚀 ~ updateCurrentUser ~ body:", body)
 
   if (!username || !password || !confirmPassword) {
     throwErrorWithMessage("Please fill all fields");
