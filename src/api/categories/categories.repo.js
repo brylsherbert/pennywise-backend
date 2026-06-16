@@ -2,7 +2,7 @@ import { pool } from "../../config/db.js";
 
 export const findAllCategoriesByUserId = async (userId) => {
   const sqlQuery = `
-        SELECT "id", "user_id", "name", "color"
+        SELECT "id", "user_id", "name", "color", "created_at"
         FROM "categories"
         WHERE "user_id" = $1;
     `;
@@ -13,7 +13,7 @@ export const findAllCategoriesByUserId = async (userId) => {
 
 export const findCategoryById = async (categoryId, userId) => {
   const sqlQuery = `
-        SELECT "id", "user_id", "name", "color"
+        SELECT "id", "user_id", "name", "color", "created_at"
         FROM "categories"
         WHERE "id" = $1 AND "user_id" = $2;
     `;

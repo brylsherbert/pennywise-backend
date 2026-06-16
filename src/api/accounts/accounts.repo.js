@@ -35,7 +35,7 @@ export const findAllAccountsByUserId = async (userId, limit, decodedCursor, clie
 
 export const findAccountById = async (accountId, userId, client = pool) => {
   const sqlQuery = `
-        SELECT "id", "user_id", "name", "balance"
+        SELECT "id", "user_id", "name", "balance", "created_at", "updated_at"
         FROM "accounts"
         WHERE "id" = $1 AND "user_id" = $2;
     `;
