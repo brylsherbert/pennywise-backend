@@ -38,7 +38,6 @@ export const getAccountUnallocatedAmount = (balance, allocated_amount) =>
 export const hasEnoughTotalUnallocatedForFill = async (userId, amount) =>
 {
     const { total_unallocated } = await getBudgetsSummary(userId);
-    console.log("🚀 ~ hasEnoughTotalUnallocatedForFill ~ total_unallocated:", total_unallocated)
 
     return Number(total_unallocated) >= Number(amount);
 };

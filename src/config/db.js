@@ -31,7 +31,6 @@ async function connectDB(retries = 10) {
       return;
     } catch (error) {
       retries--;
-      console.log(`DB not ready. Retries left: ${retries}`);
       await new Promise((res) => setTimeout(res, 3000));
     }
   }
