@@ -70,22 +70,7 @@ export const updateCategoryById = async (categoryId, body, loggedInUser) => {
     throwErrorWithMessage("Something went wrong. No id found.");
   }
 
-  // Check if there is a user loggedIn to create category
-  const existingUser = await userRepo.findUserByEmail(loggedInUser.email);
-
-  if (!existingUser) {
-    throwErrorWithMessage("User does not exist.");
-  }
-
-  // Check if category exists
-  const existingCategory = await categoriesRepo.findCategoryById(categoryId);
-
-  if (!existingCategory) {
-    throwErrorWithMessage("Category not found");
-  }
-  
-  // Check if user is authorized.
-  authorizeUserAction(existingCategory.user_id, existingUser.id);
+  const existingCategory = await getCategoryById(categoryId, loggedInUser);
 
   const { name, color } = body;
 
@@ -96,7 +81,7 @@ export const updateCategoryById = async (categoryId, body, loggedInUser) => {
   // Create category object to update in db
   const updateCategoryPayload = {
     id: existingCategory.id,
-    user_id: loggedInUser.id,
+    user_id: loggedInUser?.id,
     name: name ? name : existingCategory.name,
     color: color ? color : existingCategory.color,
   };
@@ -112,24 +97,11 @@ export const updateCategoryById = async (categoryId, body, loggedInUser) => {
 
 export const deleteCategoryById = async (categoryId, loggedInUser) =>
 {
-  // Check if there is a user loggedIn to create category
-  const existingUser = await userRepo.findUserByEmail(loggedInUser.email);
-
-  if (!existingUser) {
-    throwErrorWithMessage("User does not exist.");
-  }
-  
-  const existingCategory = await categoriesRepo.findCategoryById(categoryId);
-  if (!existingCategory) {
-    throwErrorWithMessage("Category does not exist!");
-  }
-
-  // Check if user is authorized.
-  authorizeUserAction(existingCategory?.user_id, existingUser?.id);
+  const existingCategory = await getCategoryById(categoryId, loggedInUser);
 
   const result = await categoriesRepo.deleteCategoryById(
     existingCategory.id,
-    existingUser?.id,
+    loggedInUser?.id,
   );
 
   if (!result) {
