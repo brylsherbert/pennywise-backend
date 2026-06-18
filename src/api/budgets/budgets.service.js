@@ -174,7 +174,7 @@ export const getBudgetSummary = async (loggedInUser) =>
 
 export const deleteBudgetById = async (budgetId, loggedInUser) =>
 {
-  const existingBudget = await getBudgetById(budgetId);
+  const existingBudget = await getBudgetById(budgetId, loggedInUser);
 
   const allTransaction = await transactionsRepo.findAllTransactionsByBudgetId(existingBudget?.id, loggedInUser?.id);
 
