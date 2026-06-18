@@ -195,8 +195,10 @@ export const handleBudgetDeletionWithTransaction = async (budgetId, deleteBudget
 {
   const { all_transaction, user_id } = deleteBudgetPayload;
   
-  for (let i = 0, length = all_transaction.length; i < length; i ++) {
-    await handleDeleteTransactionWithAccount(all_transaction[i], client);
+  if (all_transaction?.length > 0) {
+    for (let i = 0, length = all_transaction.length; i < length; i ++) {
+      await handleDeleteTransactionWithAccount(all_transaction[i], client);
+    }
   }
   
   const deletedBudget = await budgetsRepo.deleteBudgetById(budgetId, user_id, client);
