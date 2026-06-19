@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import { connectDB } from "./config/db.js";
 import apiRoutes from "./routes/v1.routes.js";
+import healthRoutes from "./api/health/health.routes.js";
 import globalErrorHandler from "./middlewares/global-error-handler.middleware.js";
 
 // Initialize db and create an express app
@@ -16,6 +17,7 @@ app.use(express.urlencoded({ extended: true }));
 const PORT = process.env.PORT || 5001;
 
 // Routes
+app.use('/api/v1/health', healthRoutes);
 app.use('/api/v1', apiRoutes);
 
 // Initialize global error handler (ran on next)
