@@ -35,16 +35,16 @@ export const getAccountUnallocatedAmount = (balance, allocated_amount) =>
     return balance - allocated_amount;
 }
 
-export const hasEnoughTotalUnallocatedForFill = async (userId, amount) =>
+export const hasEnoughTotalUnallocatedForFill = async (userId, amount, client) =>
 {
-    const { total_unallocated } = await getBudgetsSummary(userId);
+    const { total_unallocated } = await getBudgetsSummary(userId, client);
 
     return Number(total_unallocated) >= Number(amount);
 };
 
-export const getBudgetsSummary = async (userId) =>
+export const getBudgetsSummary = async (userId, client) =>
 {
-    const budgetsSummary = await getUserBudgetSummary(userId);
+    const budgetsSummary = await getUserBudgetSummary(userId, client);
 
     if (!budgetsSummary) {
         const error = new Error("Error in fetching budgets summary. Please try again.");
@@ -64,3 +64,5 @@ export const getDiffAmount = (amount, existingTransactionAmount) =>
     const roundedResult = roundNumber(result);
     return roundedResult;
 }
+
+export const areAmountsEqual = (a, b) => getDiffAmount(a, b) === 0;

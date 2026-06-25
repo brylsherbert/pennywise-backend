@@ -33,7 +33,7 @@ export const findAllTransactionsByUserId = async (userId, limit, decodedCursor) 
   return rows;
 };
 
-export const findAllTransactionsByBudgetId = async (budgetId, userId) =>
+export const findAllTransactionsByBudgetId = async (budgetId, userId, client = pool) =>
 {
   let values = [budgetId, userId];
 
@@ -44,7 +44,7 @@ export const findAllTransactionsByBudgetId = async (budgetId, userId) =>
           ORDER BY created_at DESC, id DESC
       `;
 
-  const { rows } = await pool.query(sqlQuery, values);
+  const { rows } = await client.query(sqlQuery, values);
   return rows;
 };
 
@@ -63,21 +63,21 @@ export const findAllTransactionsByAccountId = async (accountId, userId) =>
   return rows;
 };
 
-export const findTransactionById = async (transactionId) =>
+export const findTransactionById = async (transactionId, userId, client = pool) =>
 {
   const sqlQuery = `
         SELECT "id", "user_id", "account_id", "budget_id", "type", "amount", "title", "transaction_date", "created_at", "updated_at"
         FROM "transactions"
-        WHERE "id" = $1;
+        WHERE "id" = $1 AND "user_id" = $2;
     `;
 
-  const { rows } = await pool.query(sqlQuery, [transactionId]);
+  const { rows } = await client.query(sqlQuery, [transactionId, userId]);
   return rows[0];
 };
 
-export const insertTransactionToDB = async (transactionData, client = pool) =>
+export const insertTransactionToDB = async (transactionPayload, client = pool) =>
 {
-  const { id, user_id, account_id, budget_id, type, amount, title, transaction_date } = transactionData;
+  const { id, user_id, account_id, budget_id, type, amount, title, transaction_date } = transactionPayload;
 
   const sqlQuery = `
         INSERT INTO "transactions" ("id", "user_id", "account_id", "budget_id", "type", "amount", "title", "transaction_date")
@@ -90,9 +90,9 @@ export const insertTransactionToDB = async (transactionData, client = pool) =>
   return rows[0];
 };
 
-export const updateTransactionById = async (transactionData, client = pool) =>
+export const updateTransactionById = async (transactionPayload, client = pool) =>
 {
-  const { id, user_id, account_id, budget_id, type, amount, title, transaction_date } = transactionData;
+  const { id, user_id, account_id, budget_id, type, amount, title, transaction_date } = transactionPayload;
 
   const sqlQuery = `
         UPDATE "transactions" SET "type" = $3, "amount" = $4, "title" = $5, "budget_id" = $6, "account_id" = $7, "transaction_date" = $8
@@ -103,6 +103,19 @@ export const updateTransactionById = async (transactionData, client = pool) =>
   const result = await client.query(sqlQuery, [id, user_id, type, amount, title, budget_id, account_id, transaction_date]);
   return result.rows[0];
 };
+
+export const updateTransactionAmount = async (transactionId, userId, balanceDelta, client = pool) =>
+  {
+    const sqlQuery = `
+            UPDATE "transactions"
+            SET "amount" = "amount" + $3
+            WHERE "id" = $1 and "user_id" = $2
+            RETURNING *;
+      `;
+  
+    const { rows } = await client.query(sqlQuery, [transactionId, userId, balanceDelta]);
+    return rows[0];
+  }
 
 export const deleteTransactionById = async (transactionId, userId, client = pool) =>
 {

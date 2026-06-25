@@ -9,13 +9,13 @@ export const findAllBudgetsByUserId = async (userId, limit, decodedCursor) =>
         FROM "budgets"
         WHERE "user_id" = $1
     `;
-  
+
   if (decodedCursor) {
     values.push(
       decodedCursor?.created_at,
       decodedCursor?.id
     );
-    
+
     sqlQuery += `
       AND (created_at, id) < ($2, $3)
     `;
@@ -33,18 +33,20 @@ export const findAllBudgetsByUserId = async (userId, limit, decodedCursor) =>
   return rows;
 };
 
-export const findBudgetById = async (budgetId, userId) => {
+export const findBudgetById = async (budgetId, userId, client = pool) =>
+{
   const sqlQuery = `
         SELECT "id", "user_id", "category_id", "name", "target_amount", "allocated_amount", "created_at", "updated_at"
         FROM "budgets"
         WHERE "id" = $1 AND "user_id" = $2;
     `;
 
-  const { rows } = await pool.query(sqlQuery, [budgetId, userId]);
+  const { rows } = await client.query(sqlQuery, [budgetId, userId]);
   return rows[0];
 };
 
-export const insertBudgetToDB = async (budgetPayload, client = pool) => {
+export const insertBudgetToDB = async (budgetPayload, client = pool) =>
+{
   const { id, user_id, category_id, name, target_amount } = budgetPayload;
 
   const sqlQuery = `
@@ -54,11 +56,12 @@ export const insertBudgetToDB = async (budgetPayload, client = pool) => {
     `;
 
   const { rows } = await client.query(sqlQuery, [id, user_id, category_id, name, target_amount]);
-  
+
   return rows[0];
 };
 
-export const updateBudgetById = async (budgetPayload) => {
+export const updateBudgetById = async (budgetPayload) =>
+{
   const { id, user_id, category_id, name, target_amount } = budgetPayload;
 
   const sqlQuery = `
@@ -71,7 +74,8 @@ export const updateBudgetById = async (budgetPayload) => {
   return result.rows[0];
 };
 
-export const deleteBudgetById = async (budgetId, userId, client = pool) => {
+export const deleteBudgetById = async (budgetId, userId, client = pool) =>
+{
   const sqlQuery = `
         DELETE FROM "budgets"
         WHERE "id" = $1 AND "user_id" = $2;
@@ -81,7 +85,8 @@ export const deleteBudgetById = async (budgetId, userId, client = pool) => {
   return result.rowCount > 0;
 };
 
-export const getUserBudgetSummary = async (userId, client = pool) => {
+export const getUserBudgetSummary = async (userId, client = pool) =>
+{
   const sqlQuery = `
     SELECT
       COALESCE((
@@ -126,14 +131,28 @@ export const getUserBudgetSummary = async (userId, client = pool) => {
   return rows[0];
 };
 
-export const updateAllocatedAmount = async (budgetId, userId, balanceDelta, client = pool) => {
-    const sqlQuery = `
+export const updateAllocatedAmount = async (budgetId, userId, balanceDelta, client = pool) =>
+{
+  const sqlQuery = `
           UPDATE "budgets"
           SET "allocated_amount" = "allocated_amount" + $3
           WHERE "id" = $1 and "user_id" = $2
           RETURNING *;
     `;
-  
-    const { rows } = await client.query(sqlQuery, [budgetId, userId, balanceDelta]);
-    return rows[0];
+
+  const { rows } = await client.query(sqlQuery, [budgetId, userId, balanceDelta]);
+  return rows[0];
 }
+
+export const findBudgetsByIdsForUpdate = async (budgetIds, userId, client = pool) =>
+{
+  const sqlQuery = `
+        SELECT "id", "user_id", "category_id", "name", "target_amount", "allocated_amount", "created_at", "updated_at"
+        FROM "budgets"
+        WHERE "id" = ANY($1::uuid[]) AND "user_id" = $2
+        FOR UPDATE;
+      `;
+
+  const { rows } = await client.query(sqlQuery, [budgetIds, userId]);
+  return rows;
+};
