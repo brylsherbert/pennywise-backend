@@ -2,11 +2,12 @@ import { v7 as uuidv7 } from "uuid";
 import * as budgetsRepo from "./budgets.repo.js";
 import * as userRepo from "../user/user.repo.js";
 import * as transactionsRepo from "../transactions/transactions.repo.js";
+import * as transactionBudgetsRepo from "../transactions/transaction.budgets.repo.js";
 import * as categoriesRepo from "../categories/categories.repo.js";
 import { authorizeUserAction } from "../../utils/authentication.utils.js";
 import { decodeCursor, encodeCursor } from "../../utils/cursor.utils.js";
 import { withTransaction } from "../../utils/db-transaction.utils.js";
-import { handleDeleteTransactionWithAccount } from "../transactions/transactions.service.js";
+import { handleDeleteTransactionWithAccount, handleDeleteTransactionBudget } from "../transactions/transactions.service.js";
 import { throwErrorWithMessage } from "../../utils/error.utils.js";
 
 export const getAllBudgets = async (loggedInUser, limit, cursor) =>
@@ -176,32 +177,36 @@ export const deleteBudgetById = async (budgetId, loggedInUser) =>
 {
   const existingBudget = await getBudgetById(budgetId, loggedInUser);
 
-  const allTransaction = await transactionsRepo.findAllTransactionsByBudgetId(existingBudget?.id, loggedInUser?.id);
-
-  if (!allTransaction) {
-    throwErrorWithMessage("Budget does not exist!");
-  }
-
   const deleteBudgetPayload = {
-    all_transaction: allTransaction,
-    user_id: loggedInUser?.id
+    budget_id: existingBudget?.id,
+    user_id: loggedInUser?.id,
   }
 
-  return withTransaction((client) => handleBudgetDeletionWithTransaction(existingBudget?.id, deleteBudgetPayload, client));
+  return withTransaction((client) => handleBudgetDeletionWithTransaction(deleteBudgetPayload, client));
 };
 
 // Helpers
-export const handleBudgetDeletionWithTransaction = async (budgetId, deleteBudgetPayload, client) =>
+export const handleBudgetDeletionWithTransaction = async (deleteBudgetPayload, client) =>
 {
-  const { all_transaction, user_id } = deleteBudgetPayload;
-  
-  if (all_transaction?.length > 0) {
-    for (let i = 0, length = all_transaction.length; i < length; i ++) {
-      await handleDeleteTransactionWithAccount(all_transaction[i], client);
+  const { budget_id, user_id } = deleteBudgetPayload;
+
+  const allTransactions = await transactionsRepo.findAllTransactionsByBudgetId(budget_id, user_id, client);
+
+  if (allTransactions?.length > 0) {
+    for (let i = 0, length = allTransactions.length; i < length; i ++) {
+      await handleDeleteTransactionWithAccount(allTransactions[i], client);
+    }
+  }
+
+  const allTransactionBudgets = await transactionBudgetsRepo.findTransactionBudgetsByBudgetId(budget_id, user_id, client);
+
+  if (allTransactionBudgets?.length > 0) {
+    for (let i = 0, length = allTransactionBudgets.length; i < length; i ++) {
+      await handleDeleteTransactionBudget(allTransactionBudgets[i], client);
     }
   }
   
-  const deletedBudget = await budgetsRepo.deleteBudgetById(budgetId, user_id, client);
+  const deletedBudget = await budgetsRepo.deleteBudgetById(budget_id, user_id, client);
   
-  return { isBudgetDeleted: deletedBudget }
+  return deletedBudget;
 }
