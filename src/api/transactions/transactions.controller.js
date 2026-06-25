@@ -1,7 +1,8 @@
 import * as transactionsService from "./transactions.service.js";
 import { handleResponse } from "../../utils/response-handler.utils.js";
 
-export const getAllTransactionsController = async (req, res, next) => {
+export const getAllTransactionsController = async (req, res, next) =>
+{
   try {
     const limit = Number(req.query.limit) || 20;
     const cursor = req.query.cursor;
@@ -12,7 +13,8 @@ export const getAllTransactionsController = async (req, res, next) => {
   }
 };
 
-export const getAllTransactionsByBudgetIdController = async (req, res, next) => {
+export const getAllTransactionsByBudgetIdController = async (req, res, next) =>
+{
   try {
     const allTransactions = await transactionsService.getAllTransactionsByBudgetId(req.params.id, req.user);
     handleResponse(res, 200, "Fetched transactions by budgetId successfully", allTransactions.data, allTransactions.pagination);
@@ -21,7 +23,8 @@ export const getAllTransactionsByBudgetIdController = async (req, res, next) => 
   }
 };
 
-export const getAllTransactionsByAccountIdController = async (req, res, next) => {
+export const getAllTransactionsByAccountIdController = async (req, res, next) =>
+{
   try {
     const allTransactions = await transactionsService.getAllTransactionsByAccountId(req.params.id, req.user);
     handleResponse(res, 200, "Fetched transactions by accountId successfully", allTransactions.data, allTransactions.pagination);
@@ -30,7 +33,28 @@ export const getAllTransactionsByAccountIdController = async (req, res, next) =>
   }
 };
 
-export const getTransactionByIdController = async (req, res, next) => {
+export const getAllFillTransactionBudgetsController = async (req, res, next) =>
+{
+  try {
+    const allFillBudgets = await transactionsService.getAllFillTransactionBudgets(req.user);
+    handleResponse(res, 200, "Fetched all fill budgets successfully", allFillBudgets.data);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getAllFillTransactionBudgetsByTransactionIdController = async (req, res, next) =>
+{
+  try {
+    const allFillbudgets = await transactionsService.getAllFillTransactionBudgetsByTransactionId(req.params.id, req.user);
+    handleResponse(res, 200, "Fetched all fill budgets for transaction successfully", allFillbudgets.data);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getTransactionByIdController = async (req, res, next) =>
+{
   try {
     const transaction = await transactionsService.getTransactionById(
       req.params.id,
@@ -42,7 +66,8 @@ export const getTransactionByIdController = async (req, res, next) => {
   }
 };
 
-export const createTransactionController = async (req, res, next) => {
+export const createTransactionController = async (req, res, next) =>
+{
   try {
     const newTransaction = await transactionsService.createTransaction(
       req.body,
@@ -55,24 +80,36 @@ export const createTransactionController = async (req, res, next) => {
   }
 };
 
-export const updateTransactionByIdController = async (req, res, next) => {
+export const updateTransactionByIdController = async (req, res, next) =>
+{
   try {
     const updatedTransaction = await transactionsService.updateTransactionById(
       req.params.id,
       req.body,
       req.user,
     );
-      
+
     handleResponse(res, 200, "Transaction updated successfully", updatedTransaction);
   } catch (error) {
     next(error);
   }
 };
 
-export const deleteTransactionByIdController = async (req, res, next) => {
+export const deleteTransactionByIdController = async (req, res, next) =>
+{
   try {
     const deletedTransaction = await transactionsService.deleteTransactionById(req.params.id, req.user);
     handleResponse(res, 200, "Transaction deleted successfully", deletedTransaction);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteTransactionBudgetByIdController = async (req, res, next) =>
+{
+  try {
+    const deletedTransactionBudget = await transactionsService.deleteTransactionBudgetById(req.params.id, req.user);
+    handleResponse(res, 200, "Transaction budget deleted successfully", deletedTransactionBudget);
   } catch (error) {
     next(error);
   }

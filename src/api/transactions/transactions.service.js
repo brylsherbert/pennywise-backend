@@ -3,11 +3,14 @@ import * as transactionsRepo from "./transactions.repo.js";
 import * as userRepo from "../user/user.repo.js";
 import * as accountsRepo from "../accounts/accounts.repo.js";
 import * as budgetsRepo from "../budgets/budgets.repo.js";
+import * as transactionBudgetsRepo from "../transactions/transaction.budgets.repo.js";
 import { authorizeUserAction } from "../../utils/authentication.utils.js";
 import { decodeCursor, encodeCursor } from "../../utils/cursor.utils.js";
-import { getBalanceDelta, getDiffAmount, hasEnoughTotalUnallocatedForFill, isBalanceValidForExpense } from "../../utils/balance.utils.js";
+import { areAmountsEqual, getBalanceDelta, getDiffAmount, hasEnoughTotalUnallocatedForFill, isBalanceValidForExpense } from "../../utils/balance.utils.js";
 import { withTransaction } from "../../utils/db-transaction.utils.js";
 import { throwErrorWithMessage } from "../../utils/error.utils.js";
+import { getTotalBudgetNewAllocatedAmount } from "../../utils/budget.utils.js";
+import { getBudgetById } from "../budgets/budgets.service.js";
 
 export const getAllTransactions = async (loggedInUser, limit, cursor) =>
 {
@@ -51,20 +54,13 @@ export const getAllTransactions = async (loggedInUser, limit, cursor) =>
 
 export const getAllTransactionsByBudgetId = async (budgetId, loggedInUser) =>
 {
-  // Check if user loggedIn is a valid user
-  const existingUser = await userRepo.findUserByEmail(loggedInUser.email);
-
-  if (!existingUser) {
-    throwErrorWithMessage("User does not exist.");
-  }
-
-  const existingBudget = await budgetsRepo.findBudgetById(budgetId, existingUser?.id);
+  const existingBudget = await getBudgetById(budgetId, loggedInUser);
 
   if (!existingBudget) {
     throwErrorWithMessage("Budget does not exist.");
   }
 
-  const allTransactions = await transactionsRepo.findAllTransactionsByBudgetId(existingBudget?.id, existingUser.id);
+  const allTransactions = await transactionsRepo.findAllTransactionsByBudgetId(existingBudget?.id, existingBudget?.user_id);
 
   if (!allTransactions) {
     throwErrorWithMessage("Error fetching transactions");
@@ -72,6 +68,46 @@ export const getAllTransactionsByBudgetId = async (budgetId, loggedInUser) =>
 
   return {
     data: allTransactions.map(({ ...transaction }) => transaction),
+  };
+};
+
+export const getAllFillTransactionBudgets = async (loggedInUser) =>
+{
+  // Check if user loggedIn is a valid user
+  const existingUser = await userRepo.findUserByEmail(loggedInUser.email);
+
+  if (!existingUser) {
+    throwErrorWithMessage("User does not exist.");
+  }
+
+  const allFillTransactionBudgets = await transactionBudgetsRepo.findAllTransactionBudgets(existingUser?.id);
+
+  if (!allFillTransactionBudgets) {
+    throwErrorWithMessage("Error getting transaction budgets. Please try again.");
+  }
+
+  return {
+    data: allFillTransactionBudgets.map(({ ...transaction }) => transaction),
+  };
+};
+
+export const getAllFillTransactionBudgetsByTransactionId = async (transactionId, loggedInUser) =>
+{
+  // Check if user loggedIn is a valid user
+  const existingUser = await userRepo.findUserByEmail(loggedInUser.email);
+
+  if (!existingUser) {
+    throwErrorWithMessage("User does not exist.");
+  }
+
+  const allFillTransactionBudgets = await transactionBudgetsRepo.findTransactionBudgetsByTransactionId(transactionId, existingUser?.id);
+
+  if (!allFillTransactionBudgets) {
+    throwErrorWithMessage("Fill transaction budgets does not exist.");
+  }
+
+  return {
+    data: allFillTransactionBudgets.map(({ ...transaction }) => transaction),
   };
 };
 
@@ -110,7 +146,7 @@ export const getTransactionById = async (transactionId, loggedInUser) =>
     throwErrorWithMessage("User does not exist.");
   }
 
-  const existingTransaction = await transactionsRepo.findTransactionById(transactionId);
+  const existingTransaction = await transactionsRepo.findTransactionById(transactionId, existingUser?.id);
 
   if (!existingTransaction) {
     throwErrorWithMessage("Transaction not found");
@@ -121,41 +157,58 @@ export const getTransactionById = async (transactionId, loggedInUser) =>
   return existingTransaction;
 };
 
-export const createTransaction = async (payload, loggedInUser) =>
+export const getTransactionBudgetById = async (transactionBudgetId, loggedInUser) =>
 {
-  // Check if there is a user loggedIn to create transaction
+  // Check if user loggedIn is a valid user
   const existingUser = await userRepo.findUserByEmail(loggedInUser.email);
 
   if (!existingUser) {
     throwErrorWithMessage("User does not exist.");
   }
 
-  const { account_id, budget_id, type, amount, title, transaction_date } = payload;
+  const existingTransactionBudget = await transactionBudgetsRepo.findTransactionBudgetById(transactionBudgetId, existingUser.id);
 
-  // Validate payload
-  if (!type || !amount || !title) {
+  if (!existingTransactionBudget) {
+    throwErrorWithMessage("Transaction not found");
+  }
+
+  authorizeUserAction(existingTransactionBudget.user_id, existingUser.id);
+
+  return existingTransactionBudget;
+};
+
+export const createTransaction = async (payload, loggedInUser) =>
+{
+  const existingUser = await userRepo.findUserByEmail(loggedInUser.email);
+
+  if (!existingUser) {
+    throwErrorWithMessage("User does not exist.");
+  }
+
+  const { account_id, budget_id, budgets, type, amount, title, transaction_date } = payload;
+
+  if (!type || !title) {
     throwErrorWithMessage("Please fill all required fields");
   }
 
   let existingAccount;
   let existingBudget;
 
-  // Check if account exists
-  if (account_id) {
-    existingAccount = await accountsRepo.findAccountById(account_id, existingUser?.id);
+  if (['expense', 'income'].includes(type)) {
+    if (account_id) {
+      existingAccount = await accountsRepo.findAccountById(account_id, existingUser?.id);
 
-    if (!existingAccount) {
-      throwErrorWithMessage("Account not found");
+      if (!existingAccount) {
+        throwErrorWithMessage("Account not found");
+      }
     }
-  }
 
-  // Check if budget exist
-  if (budget_id) {
-    // Check if category exists
-    existingBudget = await budgetsRepo.findBudgetById(budget_id, existingUser?.id);
+    if (budget_id) {
+      existingBudget = await budgetsRepo.findBudgetById(budget_id, existingUser?.id);
 
-    if (!existingBudget) {
-      throwErrorWithMessage("Budget not found");
+      if (!existingBudget) {
+        throwErrorWithMessage("Budget not found");
+      }
     }
   }
 
@@ -169,17 +222,9 @@ export const createTransaction = async (payload, loggedInUser) =>
     }
   }
 
-  // Validate if total_unallocated is enough for fill
-  if (type === "fill") {
-    const hasEnoughUnallocated = await hasEnoughTotalUnallocatedForFill(existingUser?.id, amount);
-
-    if (!hasEnoughUnallocated) {
-      throwErrorWithMessage("Not enough total_unallocated for fill transaction. Please try again.");
-    }
-  }
-
-  const transcationHelpers = {
-    balanceDelta: getBalanceDelta(type, amount)
+  const transactionHelpers = {
+    balanceDelta: getBalanceDelta(type, amount),
+    budgets,
   }
 
   // Gather transaction data and insert to database using transaction helper
@@ -189,12 +234,12 @@ export const createTransaction = async (payload, loggedInUser) =>
     account_id: type === 'fill' ? null : existingAccount?.id,
     budget_id: type === 'income' ? null : existingBudget?.id,
     type,
-    amount,
+    amount: type === 'fill' ? null : amount,
     title,
     transaction_date: transaction_date ? transaction_date : new Date().toISOString(),
   };
 
-  return await withTransaction((client) => handleCreateTransactionWithAccount(transactionPayload, transcationHelpers, client));
+  return await withTransaction((client) => handleCreateTransactionWithAccount(transactionPayload, transactionHelpers, client));
 };
 
 export const updateTransactionById = async (transactionId, payload, loggedInUser) =>
@@ -210,6 +255,7 @@ export const updateTransactionById = async (transactionId, payload, loggedInUser
     account_id,
     budget_id,
     amount,
+    budgets,
     title,
     transaction_date,
   } = payload;
@@ -259,7 +305,7 @@ export const updateTransactionById = async (transactionId, payload, loggedInUser
     }
   }
 
-  const isSameTransactionAmount = existingTransaction?.amount === amount;
+  const isSameTransactionAmount = areAmountsEqual(existingTransaction?.amount, amount);
 
   const transactionHelpers = {
     is_same_account: isSameAccount,
@@ -271,7 +317,8 @@ export const updateTransactionById = async (transactionId, payload, loggedInUser
     old_budget: oldBudget,
     new_budget: newBudget,
     diff_amount: getDiffAmount(amount, existingTransaction?.amount),
-    diff_transaction_amount: isSameTransactionAmount ? existingTransaction?.amount : amount
+    diff_transaction_amount: isSameTransactionAmount ? existingTransaction?.amount : amount,
+    budgetsPayload: budgets,
   }
 
   const transactionPayload = {
@@ -280,9 +327,9 @@ export const updateTransactionById = async (transactionId, payload, loggedInUser
     type: existingTransaction.type,
 
     // Fields that can be updated to new value
-    account_id: existingTransaction.type === 'fill' ? existingTransaction.account_id : (account_id || existingTransaction?.account_id),
-    budget_id: existingTransaction.type === 'income' ? existingTransaction.budget_id : (budget_id || existingTransaction?.budget_id),
-    amount: amount ?? existingTransaction.amount,
+    account_id: existingTransaction.type === 'fill' ? null : (account_id || existingTransaction?.account_id),
+    budget_id: existingTransaction.type === 'fill' ? null : (budget_id || existingTransaction?.budget_id),
+    amount: existingTransaction.type === 'fill' ? null : amount ?? existingTransaction.amount,
     title: title || existingTransaction.title,
     transaction_date: transaction_date || existingTransaction.transaction_date,
   };
@@ -291,54 +338,69 @@ export const updateTransactionById = async (transactionId, payload, loggedInUser
     await handleExpenseValidationOnUpdate(transactionPayload, transactionHelpers);
   }
 
-  if (existingTransaction?.type === 'fill') {
-    await handleFillValidationOnUpdate(transactionPayload, transactionHelpers);
-  }
-
   return await withTransaction((client) => handleUpdateTransactionWithAccount(transactionPayload, transactionHelpers, client));
 };
 
 export const deleteTransactionById = async (transactionId, loggedInUser) =>
 {
-  // Check if there is a user loggedIn to create transaction
-  const existingUser = await userRepo.findUserByEmail(loggedInUser.email);
-
-  if (!existingUser) {
-    throwErrorWithMessage("User does not exist.");
-  }
-
-  const existingTransaction = await transactionsRepo.findTransactionById(transactionId);
-
-  if (!existingTransaction) {
-    throwErrorWithMessage("Transaction does not exist!");
-  }
-
-  // Check if user is authorized.
-  authorizeUserAction(existingTransaction?.user_id, existingUser?.id);
+  const existingTransaction = await getTransactionById(transactionId, loggedInUser);
 
   return await withTransaction((client) => handleDeleteTransactionWithAccount(existingTransaction, client));
 };
+
+export const deleteTransactionBudgetById = async (transactionBudgetId, loggedInUser) =>
+{
+  const existingTransactionBudget = await getTransactionBudgetById(transactionBudgetId, loggedInUser);
+
+  return await withTransaction((client) => handleDeleteTransactionBudget(existingTransactionBudget, client));
+};
+
 
 
 //--- Helpers
 
 // Create transaction and update account balance based on transaction type
-const handleCreateTransactionWithAccount = async (transcationPayload, transactionHelpers, client) =>
+const handleCreateTransactionWithAccount = async (transactionPayload, transactionHelpers, client) =>
 {
-  // 1. Create transaction using transcationPayload
-  const createdTransaction = await transactionsRepo.insertTransactionToDB(transcationPayload, client);
+  // 3. Deconstruct transactionPayload and transactionHelpers
+  const { balanceDelta, budgets: budgetsPayload } = transactionHelpers;
+  const { account_id, budget_id, user_id, type, amount } = transactionPayload;
+
+  let account;
+  let budget;
+
+  if (type === 'fill') {
+    const budgets = await getAllBudgetsWithNewAllocatedAmount(budgetsPayload, 'create', user_id, client);
+
+    await handleFillValidationOnCreate(budgets, user_id, client);
+
+    const totalBudgetNewAllocatedAmount = getTotalBudgetNewAllocatedAmount(budgets);
+
+    const createdTransaction = await transactionsRepo.insertTransactionToDB(
+      {
+        ...transactionPayload,
+        amount: totalBudgetNewAllocatedAmount,
+        account_id: null,
+        budget_id: null,
+      }
+      , client);
+
+    if (!createdTransaction) {
+      throwErrorWithMessage("Error creating transaction. Please try again.");
+    }
+
+    const newBudgets = await handleFillCreate(budgets, createdTransaction, user_id, client);
+
+    return { transaction: createdTransaction, budgets: newBudgets };
+  }
+
+  // 1. Create transaction using transactionPayload
+  const createdTransaction = await transactionsRepo.insertTransactionToDB(transactionPayload, client);
 
   // 2. Check if transaction is created successfully
   if (!createdTransaction) {
     throwErrorWithMessage("Error creating transaction. Please try again.");
   }
-
-  // 3. Deconstruct transactionPayload and transactionHelpers
-  const { balanceDelta } = transactionHelpers;
-  const { account_id, budget_id, user_id, type, amount } = transcationPayload;
-
-  let account;
-  let budget;
 
   // Handles account income and expense
   if (['income', 'expense'].includes(type)) {
@@ -350,7 +412,7 @@ const handleCreateTransactionWithAccount = async (transcationPayload, transactio
   }
 
   // Handles budget fill and expense
-  if (['fill', 'expense'].includes(type)) {
+  if (['expense'].includes(type)) {
     budget = await budgetsRepo.updateAllocatedAmount(budget_id, user_id, balanceDelta, client);
 
     if (!budget) {
@@ -365,12 +427,6 @@ const handleCreateTransactionWithAccount = async (transcationPayload, transactio
 // Update transaction and handle updating existing and new account balance if is_same_account is false
 const handleUpdateTransactionWithAccount = async (transactionPayload, transactionHelpers, client) =>
 {
-  const updatedTransaction = await transactionsRepo.updateTransactionById(transactionPayload, client);
-
-  if (!updatedTransaction) {
-    throwErrorWithMessage("Error updating transaction. Please try again.");
-  }
-
   let old_account;
   let new_account;
   let old_budget;
@@ -378,8 +434,23 @@ const handleUpdateTransactionWithAccount = async (transactionPayload, transactio
   let updated_accounts;
   let updated_budgets;
 
+  const { existing_transaction, budgetsPayload } = transactionHelpers;
+
+  if (transactionPayload?.type === 'fill') {
+    const budgets = await getAllBudgetsWithNewAllocatedAmount(budgetsPayload, 'update', existing_transaction?.user_id, client);
+    await handleFillValidationOnUpdate(existing_transaction, budgets, client);
+    const { updatedTransaction, newBudgets } = await handleFillUpdate(transactionPayload, budgets, client);
+
+    return { transaction: updatedTransaction, updated_budgets: newBudgets };
+  }
+
+  const updatedTransaction = await transactionsRepo.updateTransactionById(transactionPayload, client);
+
+  if (!updatedTransaction) {
+    throwErrorWithMessage("Error updating transaction. Please try again.");
+  }
+
   const updateHandlers = {
-    fill: handleFillUpdate,
     income: handleIncomeUpdate,
     expense: handleExpenseUpdate,
   };
@@ -405,8 +476,16 @@ const handleUpdateTransactionWithAccount = async (transactionPayload, transactio
 // Delete transaction and update account balance based on transaction_type
 export const handleDeleteTransactionWithAccount = async (existingTransaction, client) =>
 {
-  // 1. Deconstruct transactionPayload
+
   const { id, user_id, budget_id, amount, type, account_id } = existingTransaction;
+
+  let account;
+  let budget;
+
+  if (['fill'].includes(type)) {
+    const { deletedTransaction } = await handleFillDelete(id, user_id, client);
+    return deletedTransaction;
+  }
 
   const deletedTransaction = await transactionsRepo.deleteTransactionById(id, user_id, client);
 
@@ -414,13 +493,10 @@ export const handleDeleteTransactionWithAccount = async (existingTransaction, cl
     throwErrorWithMessage("Error deleting transaction. Please try again.");
   }
 
-  let account;
-  let budget;
-
   // 4. Get balance delta (-balanceDelta for income, +balanceDelta for expense)
   const balanceDelta = -(getBalanceDelta(type, amount));
 
-  if (type !== 'fill') {
+  if (['expense', 'income'].includes(type)) {
     // 5. Update account balance based on transaction_amount and transaction_type
     account = await accountsRepo.updateAccountBalance(account_id, user_id, balanceDelta, client);
 
@@ -430,7 +506,7 @@ export const handleDeleteTransactionWithAccount = async (existingTransaction, cl
     }
   }
 
-  if (type !== 'income') {
+  if (['expense'].includes(type)) {
     // 7. Update budget allocated amount based on transaction_amount and transaction_type
     budget = await budgetsRepo.updateAllocatedAmount(budget_id, user_id, balanceDelta, client);
 
@@ -440,53 +516,37 @@ export const handleDeleteTransactionWithAccount = async (existingTransaction, cl
     }
   }
 
-  return { is_transaction_delete: deletedTransaction, account, budget };
+  return deletedTransaction;
 }
 
-
-// Update old and new account allocated_balance & old and new budget allocated_amount
-const handleFillUpdate = async (transactionPayload, transactionHelpers, client) =>
+export const handleDeleteTransactionBudget = async (existingTransactionBudget, client) =>
 {
-  const { budget_id, type, user_id } = transactionPayload;
-  const { is_same_budget, is_same_transaction_amount, existing_transaction, diff_amount, diff_transaction_amount } = transactionHelpers;
-  const { amount: existingTransactionAmount, budget_id: existingBudgetId } = existing_transaction;
-
-  let old_account;
-  let new_account;
-  let old_budget;
-  let new_budget;
-
-  /// Do nothing if is_same_transaction_amount && is_same_account || is_same_budget
-  if (type === 'fill') {
-    //  Update old account allocated_balance and old budget allocated_amount if !is_same_transaction_amount
-    if (!is_same_transaction_amount) {
-      if (is_same_budget) {
-        old_budget = await budgetsRepo.updateAllocatedAmount(existingBudgetId, user_id, diff_amount, client);
-
-        if (!old_budget) {
-          throwErrorWithMessage("Error updating budget allocated_amount. Please try again.");
-        }
-      }
-    }
-
-    // Handles is_same_transaction_amount & !is_same_transaction_amount
-    // Subtract existingTransactionAmount to old and add diff_transaction_amount to new
-    if (!is_same_budget) {
-      old_budget = await budgetsRepo.updateAllocatedAmount(existingBudgetId, user_id, -existingTransactionAmount, client);
-
-      if (!old_budget) {
-        throwErrorWithMessage("Error updating old budget allocated_amount. Please try again.");
-      }
-
-      new_budget = await budgetsRepo.updateAllocatedAmount(budget_id, user_id, diff_transaction_amount, client);
-
-      if (!new_budget) {
-        throwErrorWithMessage("Error updating new budget allocated_amount. Please try again.");
-      }
-    }
+  const { id: transactionBudgetId, transaction_id, user_id, allocated_amount, budget_id } = existingTransactionBudget;
+  
+  const updatedTransaction = await transactionsRepo.updateTransactionAmount(transaction_id, user_id, -allocated_amount, client);
+  
+  if (!updatedTransaction) {
+    throwErrorWithMessage("Failed to update transaction amount on budget deletion. Please try again.")
+  }
+  
+  const budget = await budgetsRepo.updateAllocatedAmount(
+    budget_id,
+    user_id,
+    -allocated_amount,
+    client,
+  );
+  
+  if (!budget) {
+    throwErrorWithMessage("Failed to delete budget. Please try again.")
   }
 
-  return { old_account, new_account, old_budget, new_budget };
+  const deletedTransactionBudget = await transactionBudgetsRepo.deleteTransactionBudgetByTransactionBudgetId(transactionBudgetId, user_id, client);
+
+  if (!deletedTransactionBudget) {
+    throwErrorWithMessage("Failed to delete transaction budget. Please try again.")
+  }
+
+  return deletedTransactionBudget;
 }
 
 // Update old and new account balance based on transaction helpers
@@ -596,22 +656,22 @@ const handleExpenseUpdate = async (transactionPayload, transactionHelpers, clien
 }
 
 // Validates account unallocated_balance
-const handleFillValidationOnUpdate = async (transactionPayload, transactionHelpers) =>
+const handleFillValidationOnUpdate = async (existingTransaction, budgets, client) =>
 {
-  const { type } = transactionPayload;
-  const { is_same_budget, existing_transaction, old_budget, diff_amount } = transactionHelpers;
-  const { user_id: existingTransactionUserId } = existing_transaction;
+  if (budgets?.length <= 0) throwErrorWithMessage("Missing budgets. Please try again.")
+  const { user_id, amount, } = existingTransaction;
 
-  if (type === 'fill') {
-    const hasEnoughUnallocated = await hasEnoughTotalUnallocatedForFill(existingTransactionUserId, diff_amount);
+  const newTotalAllocatedAmount = getTotalBudgetNewAllocatedAmount(budgets);
+  const isSameTotalAllocatedAmount = areAmountsEqual(newTotalAllocatedAmount, amount);
 
-    if (!hasEnoughUnallocated) {
-      throwErrorWithMessage("Insufficient unallocated amount for fill. Please try again.");
-    }
+  if (!isSameTotalAllocatedAmount) {
+    const diffTotalAllocatedAmount = getDiffAmount(newTotalAllocatedAmount, amount);
 
-    if (diff_amount < 0 && is_same_budget) {
-      if ((Number(old_budget.allocated_amount) + diff_amount) < 0) {
-        throwErrorWithMessage("Cannot reduce fill below what this budget has already spent.");
+    if (diffTotalAllocatedAmount > 0) {
+      const hasEnoughUnallocated = await hasEnoughTotalUnallocatedForFill(user_id, diffTotalAllocatedAmount, client);
+
+      if (!hasEnoughUnallocated) {
+        throwErrorWithMessage("Not enough total_unallocated for fill transaction. Please try again.");
       }
     }
   }
@@ -629,14 +689,14 @@ const handleExpenseValidationOnUpdate = async (transactionPayload, transactionHe
     if (!is_same_account) {
       if (!isBalanceValidForExpense(new_account?.balance, diff_transaction_amount, type)) {
         throwErrorWithMessage("Insufficient new account balance");
-  
+
       }
     }
 
     if (!is_same_budget) {
       if (!isBalanceValidForExpense(new_budget?.allocated_amount, diff_transaction_amount, type)) {
         throwErrorWithMessage("Insufficient new budget allocation amount");
-  
+
       }
     }
 
@@ -644,16 +704,217 @@ const handleExpenseValidationOnUpdate = async (transactionPayload, transactionHe
       if (is_same_account) {
         if (!isBalanceValidForExpense(old_account?.balance, diff_amount, type)) {
           throwErrorWithMessage("Insufficient account balance");
-    
+
         }
       }
 
       if (is_same_budget) {
         if (!isBalanceValidForExpense(old_budget?.allocated_amount, diff_amount, type)) {
           throwErrorWithMessage("Insufficient budget allocation amount");
-    
+
         }
       }
     }
   }
+}
+
+// Fill Transaction Helpers
+const handleFillValidationOnCreate = async (budgets, existingUserId, client) =>
+{
+  if (budgets?.length <= 0) throwErrorWithMessage("Missing budgets for fill transaction");
+
+  const totalBudgetNewAllocatedAmount = getTotalBudgetNewAllocatedAmount(budgets);
+
+  const hasEnoughUnallocated = await hasEnoughTotalUnallocatedForFill(existingUserId, totalBudgetNewAllocatedAmount, client);
+
+  if (!hasEnoughUnallocated) {
+    throwErrorWithMessage("Not enough total_unallocated for fill transaction. Please try again.");
+  }
+}
+
+const handleFillCreate = async (budgets, createdTransaction, user_id, client) =>
+{
+  let newBudgets = [];
+
+  for (let i = 0, length = budgets.length; i < length; i++) {
+    let budget = budgets[i];
+
+    const transactionBudget = await transactionBudgetsRepo.insertTransactionBudgetToDB(
+      {
+        id: uuidv7(),
+        user_id: user_id,
+        transaction_id: createdTransaction.id,
+        budget_id: budget?.budget_data?.id,
+        allocated_amount: budget?.new_allocated_amount,
+      }, client
+    );
+
+    if (!transactionBudget) {
+      throwErrorWithMessage("Error linking budget to fill transaction.");
+    }
+
+    budget = await budgetsRepo.updateAllocatedAmount(
+      budget?.budget_data?.id,
+      user_id,
+      budget?.new_allocated_amount,
+      client,
+    );
+
+    if (!budget) {
+      throwErrorWithMessage("Error filling budget!");
+    }
+
+    newBudgets.push(budget);
+  }
+
+  return newBudgets;
+}
+
+const handleFillDelete = async (transactionId, userId, client) =>
+{
+  const fillTransactionBudgets = await transactionBudgetsRepo.findTransactionBudgetsByTransactionId(transactionId, userId, client);
+
+  if (fillTransactionBudgets?.length > 0) {
+    for (let i = 0, length = fillTransactionBudgets?.length; i < length; i++) {
+      let fillBudget = fillTransactionBudgets[i];
+  
+      const existingBudget = await budgetsRepo.findBudgetById(fillBudget?.budget_id, userId, client);
+  
+      if (!existingBudget) throwErrorWithMessage("Budget not found. Please try again.");
+  
+      const revertedAllocatedAmount = existingBudget?.allocated_amount - fillBudget?.allocated_amount;
+  
+      if (revertedAllocatedAmount < 0) {
+        throwErrorWithMessage(`Error reverting budget fill. ${existingBudget?.name} has spent ${-(revertedAllocatedAmount)} allocated amount. Please fill budget with amount and try again.`);
+      }
+  
+      const budget = await budgetsRepo.updateAllocatedAmount(
+        fillBudget?.budget_id,
+        userId,
+        -fillBudget?.allocated_amount,
+        client,
+      );
+  
+      if (!budget) throwErrorWithMessage("Error reverting budget fill!");
+    }
+  
+    const deletedFillTransactionBudget = await transactionBudgetsRepo.deleteTransactionBudgetsByTransactionId(transactionId, userId, client);
+  
+    if (!deletedFillTransactionBudget) {
+      throwErrorWithMessage("Error deleting fill transaction budget. Please try again.");
+    }
+  }
+
+  const deletedTransaction = await transactionsRepo.deleteTransactionById(transactionId, userId, client);
+
+  if (!deletedTransaction) {
+    throwErrorWithMessage("Error deleting transaction. Please try again.");
+  }
+
+  return { deletedTransaction };
+}
+
+const handleFillUpdate = async (transactionPayload, budgets, client) =>
+{
+  let newBudgets = [];
+
+  const { user_id, id } = transactionPayload;
+
+  const transactionBudgets = await transactionBudgetsRepo.findTransactionBudgetsByTransactionId(id, user_id, client);
+
+  if (!transactionBudgets) throwErrorWithMessage("Error getting transaction budgets for transaction. Please try again.");
+
+  for (let i = 0, length = budgets.length; i < length; i++) {
+    let budgetWithNewAllocatedAmount = budgets[i];
+
+    const transactionBudget = transactionBudgets.find((t) => t.budget_id === budgetWithNewAllocatedAmount?.budget_data?.id);
+
+    if (!transactionBudget && budgetWithNewAllocatedAmount?.new_allocated_amount > 0) {
+      const transactionBudget = await transactionBudgetsRepo.insertTransactionBudgetToDB(
+        {
+          id: uuidv7(),
+          user_id: user_id,
+          transaction_id: id,
+          budget_id: budgetWithNewAllocatedAmount?.budget_data?.id,
+          allocated_amount: 0,
+        }, client);
+
+      if (!transactionBudget) throwErrorWithMessage("Error creating transaction budget. Please try again.");
+    }
+
+    const previousFillContribution = Number(transactionBudget?.allocated_amount ?? 0);
+
+    const isSameAllocatedAmount = areAmountsEqual(
+      budgetWithNewAllocatedAmount?.new_allocated_amount,
+      previousFillContribution
+    );
+
+    if (!isSameAllocatedAmount) {
+      const amountDiffAmount = getDiffAmount(budgetWithNewAllocatedAmount?.new_allocated_amount, previousFillContribution);
+
+      if (amountDiffAmount < 0) {
+        const resultingAllocatedAmount = Number(budgetWithNewAllocatedAmount?.budget_data?.allocated_amount) + amountDiffAmount;
+
+        if (resultingAllocatedAmount < 0) {
+          throwErrorWithMessage(
+            `Error updating budget fill. ${budgetWithNewAllocatedAmount.budget_data.name} has spent ${-(resultingAllocatedAmount)} allocated amount. Please fill budget with amount and try again.`
+          );
+        }
+      }
+
+      // Update transaction budget
+      const updatedTransactionBudget = await transactionBudgetsRepo.updateTransactionBudgetAllocatedAmount(
+        id,
+        budgetWithNewAllocatedAmount?.budget_data?.id,
+        user_id,
+        amountDiffAmount,
+        client
+      );
+
+      if (!updatedTransactionBudget) throwErrorWithMessage("Error updating transaction budget allocated amount. Please try again.");
+
+      // Update budget allocated amount
+      const budget = await budgetsRepo.updateAllocatedAmount(budgetWithNewAllocatedAmount?.budget_data?.id, user_id, amountDiffAmount, client);
+
+      if (!budget) throwErrorWithMessage("Error updating budget allocated amount. Please try again.");
+
+      // Push budget to array
+      newBudgets.push(budget);
+    }
+  }
+
+
+  // Sum all new_allocated_amount and update transaction amount
+  const updatedTransaction = await transactionsRepo.updateTransactionById(
+    {
+      ...transactionPayload,
+      amount: getTotalBudgetNewAllocatedAmount(budgets),
+      account_id: null,
+      budget_id: null,
+    }
+    , client)
+
+  if (!updatedTransaction) throwErrorWithMessage("Error updating transaction amount. Please try again.")
+
+  return { updatedTransaction, newBudgets }
+}
+
+const getAllBudgetsWithNewAllocatedAmount = async (budgetsPayload, actionType, userId, client) =>
+{
+  const budgetsIdsFromPayload = budgetsPayload?.length > 0 ? budgetsPayload?.map((budget) => budget?.budget_id) : [];
+
+  const budgets = await budgetsRepo.findBudgetsByIdsForUpdate(budgetsIdsFromPayload, userId, client);
+
+  if (budgets?.length !== budgetsPayload?.length) throwErrorWithMessage(`One or more budgets in the payload could not be found.`);
+
+  const mappedBudgets = budgets.map((budget) =>
+  {
+    return {
+      budget_data: budget,
+      new_allocated_amount: budgetsPayload?.find((budgetPayload) => budgetPayload?.budget_id === budget?.id)?.new_allocated_amount,
+    }
+  }
+  );
+
+  return actionType === 'update' ? mappedBudgets : mappedBudgets?.filter((b) => b?.new_allocated_amount > 0);
 }
