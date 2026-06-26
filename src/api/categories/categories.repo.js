@@ -49,12 +49,22 @@ export const updateCategoryById = async (categoryData) => {
   return result.rows[0];
 };
 
-export const deleteCategoryById = async (categoryId, userId) => {
+export const deleteCategoryById = async (categoryId, userId, client = pool) => {
   const sqlQuery = `
         DELETE FROM "categories"
         WHERE "id" = $1 AND "user_id" = $2;
     `;
 
   const result = await pool.query(sqlQuery, [categoryId, userId]);
+  return result.rowCount > 0;
+};
+
+export const deleteAllCategories = async (userId, client = pool) => {
+  const sqlQuery = `
+        DELETE FROM "categories"
+        WHERE "user_id" = $1;
+    `;
+
+  const result = await client.query(sqlQuery, [userId]);
   return result.rowCount > 0;
 };

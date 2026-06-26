@@ -142,6 +142,17 @@ export const deleteTransactionBudgetByTransactionBudgetId = async (transactionBu
     return result.rowCount > 0;
 };
 
+export const deleteAllTransactionBudgets = async (userId, client = pool) =>
+{
+    const sqlQuery = `
+            DELETE FROM "fill_transaction_budgets"
+            WHERE "user_id" = $1;
+        `;
+
+    const result = await client.query(sqlQuery, [userId]);
+    return result.rowCount > 0;
+};
+
 export const updateTransactionBudgetAllocatedAmount = async (transactionId, budgetId, userId, balanceDelta, client = pool) =>
 {
     const sqlQuery = `
@@ -154,3 +165,4 @@ export const updateTransactionBudgetAllocatedAmount = async (transactionId, budg
     const { rows } = await client.query(sqlQuery, [transactionId, budgetId, userId, balanceDelta]);
     return rows[0];
 }
+
