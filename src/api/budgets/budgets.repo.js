@@ -85,6 +85,18 @@ export const deleteBudgetById = async (budgetId, userId, client = pool) =>
   return result.rowCount > 0;
 };
 
+export const deleteAllBudget = async (userId, client = pool) =>
+{
+  const sqlQuery = `
+        DELETE FROM "budgets"
+        WHERE "user_id" = $1;
+    `;
+
+  const result = await client.query(sqlQuery, [userId]);
+  return result.rowCount > 0;
+};
+
+
 export const getUserBudgetSummary = async (userId, client = pool) =>
 {
   const sqlQuery = `

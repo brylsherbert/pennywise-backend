@@ -1,8 +1,14 @@
 import { generateToken } from "../../utils/generate-token.utils.js";
 import * as userRepo from "./user.repo.js";
+import * as budgetsRepo from "../budgets/budgets.repo.js";
+import * as transactionsRepo from "../transactions/transactions.repo.js";
+import * as transactionBudgetsRepo from "../transactions/transaction.budgets.repo.js";
+import * as accountsRepo from "../accounts/accounts.repo.js";
+import * as categoriesRepo from "../categories/categories.repo.js";
 import { hash, genSalt, compare } from "bcrypt";
 import { toLowerCaseAndRemoveSpaces } from "../../utils/handle-text-transformation.utils.js";
 import { throwErrorWithMessage } from "../../utils/error.utils.js";
+import { withTransaction } from "../../utils/db-transaction.utils.js";
 
 export const getCurrentUser = async (userId) =>
 {
@@ -82,3 +88,29 @@ export const deleteCurrentUser = async (loggedInUser) =>
 
   return { message: "User deleted successfully" };
 };
+
+export const resetAllData = async (loggedInUser) =>
+{
+  const existingUser = await userRepo.findUserByEmail(loggedInUser?.email);
+  
+  if (!existingUser) {
+    throwErrorWithMessage("User does not exist!");
+  }
+
+  return withTransaction((client) => handleResetDataWithTranscation(existingUser?.id, client))
+};
+
+const handleResetDataWithTranscation = async (userId, client) =>
+{
+  try {
+    await categoriesRepo.deleteAllCategories(userId, client);
+    await transactionBudgetsRepo.deleteAllTransactionBudgets(userId, client);
+    await transactionsRepo.deleteAllTransaction(userId, client);
+    await budgetsRepo.deleteAllBudget(userId, client);
+    await accountsRepo.deleteAllAccount(userId, client);
+
+    return true;
+  } catch (err) {
+    throwErrorWithMessage(`Failed to reset user data: ${err.message}`)
+  }
+}

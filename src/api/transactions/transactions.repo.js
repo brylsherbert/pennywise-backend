@@ -127,3 +127,14 @@ export const deleteTransactionById = async (transactionId, userId, client = pool
   const result = await client.query(sqlQuery, [transactionId, userId]);
   return result.rowCount > 0;
 };
+
+export const deleteAllTransaction = async (userId, client = pool) =>
+{
+  const sqlQuery = `
+        DELETE FROM "transactions"
+        WHERE "user_id" = $1;
+    `;
+
+  const result = await client.query(sqlQuery, [userId]);
+  return result.rowCount > 0;
+};

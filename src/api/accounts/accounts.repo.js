@@ -82,6 +82,16 @@ export const deleteAccountById = async (accountId, userId, client = pool) => {
   return result.rowCount > 0;
 };
 
+export const deleteAllAccount = async (userId, client = pool) => {
+  const sqlQuery = `
+        DELETE FROM "accounts"
+        WHERE "user_id" = $1;
+    `;
+
+  const result = await client.query(sqlQuery, [userId]);
+  return result.rowCount > 0;
+};
+
 export const updateAccountBalance = async (accountId, userId, balanceDelta, client = pool) =>
 {
   const sqlQuery = `
