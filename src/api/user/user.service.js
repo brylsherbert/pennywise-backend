@@ -102,35 +102,15 @@ export const resetAllData = async (loggedInUser) =>
 
 const handleResetDataWithTranscation = async (userId, client) =>
 {
-  const deletedCategories = await categoriesRepo.deleteAllCategories(userId, client);
-  
-  if (!deletedCategories) {
-    throwErrorWithMessage("Error deleting categories. Please try again.");
-  }
+  try {
+    await categoriesRepo.deleteAllCategories(userId, client);
+    await transactionBudgetsRepo.deleteAllTransactionBudgets(userId, client);
+    await transactionsRepo.deleteAllTransaction(userId, client);
+    await budgetsRepo.deleteAllBudget(userId, client);
+    await accountsRepo.deleteAllAccount(userId, client);
 
-  const deleteTransactionBudgets = await transactionBudgetsRepo.deleteAllTransactionBudgets(userId, client);
-  
-  if (!deleteTransactionBudgets) {
-    throwErrorWithMessage("Error deleting transaction budgets. Please try again.");
+    return true;
+  } catch (err) {
+    throwErrorWithMessage(`Failed to reset user data: ${err.message}`)
   }
-
-  const deletedTransactions = await transactionsRepo.deleteAllTransaction(userId, client);
-  
-  if (!deletedTransactions) {
-    throwErrorWithMessage("Error deleting transactions. Please try again.");
-  }
-
-  const deletedBudgets = await budgetsRepo.deleteAllBudget(userId, client);
-  
-  if (!deletedBudgets) {
-    throwErrorWithMessage("Error deleting budgets. Please try again.");
-  }
-
-  const deletedAccounts = await accountsRepo.deleteAllAccount(userId, client);
-  
-  if (!deletedAccounts) {
-    throwErrorWithMessage("Error deleting accounts. Please try again.");
-  }
-
-  return true;
 }
