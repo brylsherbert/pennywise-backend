@@ -78,3 +78,18 @@ export const deleteUserInDB = async (userId) =>
   const result = await pool.query(sqlQuery, [userId]);
   return result.rowCount > 0;
 };
+
+export const userHasExistingData = async (userId, client = pool) =>
+{
+  const sqlQuery = `
+    SELECT (
+      EXISTS (SELECT 1 FROM "categories" WHERE "user_id" = $1)
+      OR EXISTS (SELECT 1 FROM "accounts" WHERE "user_id" = $1)
+      OR EXISTS (SELECT 1 FROM "budgets" WHERE "user_id" = $1)
+      OR EXISTS (SELECT 1 FROM "transactions" WHERE "user_id" = $1)
+    ) AS "has_existing_data";
+  `;
+
+  const { rows } = await client.query(sqlQuery, [userId]);
+  return rows[0]?.has_existing_data === true;
+};

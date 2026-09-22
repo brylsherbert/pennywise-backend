@@ -1,27 +1,7 @@
-import express from "express";
-import cors from "cors";
 import { connectDB } from "./config/db.js";
-import apiRoutes from "./routes/v1.routes.js";
-import healthRoutes from "./api/health/health.routes.js";
-import globalErrorHandler from "./middlewares/global-error-handler.middleware.js";
-
-// Initialize db and create an express app
-
-const app = express();
-
-// Add middlewares
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+import app from "./app.js";
 
 const PORT = process.env.PORT || 5001;
-
-// Routes
-app.use('/api/v1/health', healthRoutes);
-app.use('/api/v1', apiRoutes);
-
-// Initialize global error handler (ran on next)
-app.use(globalErrorHandler);
 
 async function bootstrap() {
   try {

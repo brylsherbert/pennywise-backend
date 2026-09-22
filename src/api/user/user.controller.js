@@ -46,3 +46,13 @@ export const resetAllDataController = async (req, res, next) =>
     next(error);
   }
 };
+
+export const importGuestDataController = async (req, res, next) =>
+{
+  try {
+    const importResult = await userService.importGuestData(req.body, req.user);
+    handleResponse(res, 201, "Guest data imported successfully", importResult);
+  } catch (error) {
+    next(error);
+  }
+};

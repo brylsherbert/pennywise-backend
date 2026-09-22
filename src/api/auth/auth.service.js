@@ -33,7 +33,7 @@ export const createUser = async (data, res) =>
     const { password, ...userWithOutPassword } =
         await userRepo.insertUserToDB(user);
 
-    return { user: userWithOutPassword, token };
+    return { user: userWithOutPassword, token, has_existing_data: false };
 };
 
 export const loginUser = async (data, res) =>
@@ -55,6 +55,7 @@ export const loginUser = async (data, res) =>
 
     // Generate Token
     const token = generateToken(existingUser.id, res);
+    const has_existing_data = await userRepo.userHasExistingData(existingUser.id);
 
-    return { user: existingUserWithOutPassword, token };
+    return { user: existingUserWithOutPassword, token, has_existing_data };
 };

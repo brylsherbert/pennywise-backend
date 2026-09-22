@@ -185,10 +185,26 @@ export const createTransaction = async (payload, loggedInUser) =>
     throwErrorWithMessage("User does not exist.");
   }
 
-  const { account_id, budget_id, budgets, type, amount, title, transaction_date } = payload;
+  const { inserted, ...result } = await withTransaction((client) =>
+    createTransactionOnClient(payload, existingUser.id, client)
+  );
+
+  return result;
+};
+
+export const createTransactionOnClient = async (payload, userId, client) =>
+{
+  const { account_id, budget_id, budgets, type, amount, title, transaction_date, client_id } = payload;
 
   if (!type || !title) {
     throwErrorWithMessage("Please fill all required fields");
+  }
+
+  if (client_id) {
+    const existingByClientId = await transactionsRepo.findTransactionByClientId(client_id, userId, client);
+    if (existingByClientId) {
+      return { transaction: existingByClientId, inserted: false };
+    }
   }
 
   let existingAccount;
@@ -196,7 +212,7 @@ export const createTransaction = async (payload, loggedInUser) =>
 
   if (['expense', 'income'].includes(type)) {
     if (account_id) {
-      existingAccount = await accountsRepo.findAccountById(account_id, existingUser?.id);
+      existingAccount = await accountsRepo.findAccountById(account_id, userId, client);
 
       if (!existingAccount) {
         throwErrorWithMessage("Account not found");
@@ -204,7 +220,7 @@ export const createTransaction = async (payload, loggedInUser) =>
     }
 
     if (budget_id) {
-      existingBudget = await budgetsRepo.findBudgetById(budget_id, existingUser?.id);
+      existingBudget = await budgetsRepo.findBudgetById(budget_id, userId, client);
 
       if (!existingBudget) {
         throwErrorWithMessage("Budget not found");
@@ -227,19 +243,20 @@ export const createTransaction = async (payload, loggedInUser) =>
     budgets,
   }
 
-  // Gather transaction data and insert to database using transaction helper
   const transactionPayload = {
     id: uuidv7(),
-    user_id: existingUser?.id,
+    user_id: userId,
     account_id: type === 'fill' ? null : existingAccount?.id,
     budget_id: type === 'income' ? null : existingBudget?.id,
     type,
     amount: type === 'fill' ? null : amount,
     title,
     transaction_date: transaction_date ? transaction_date : new Date().toISOString(),
+    client_id: client_id || null,
   };
 
-  return await withTransaction((client) => handleCreateTransactionWithAccount(transactionPayload, transactionHelpers, client));
+  const result = await handleCreateTransactionWithAccount(transactionPayload, transactionHelpers, client);
+  return { ...result, inserted: true };
 };
 
 export const updateTransactionById = async (transactionId, payload, loggedInUser) =>

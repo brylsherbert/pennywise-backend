@@ -45,17 +45,49 @@ export const findAccountById = async (accountId, userId, client = pool) => {
 };
 
 export const insertAccountToDB = async (accountData, client = pool) => {
-  const { id, user_id, name, balance } = accountData;
+  const { id, user_id, name, balance, client_id = null } = accountData;
 
   const sqlQuery = `
-        INSERT INTO "accounts" ("id", "user_id", "name", "balance")
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO "accounts" ("id", "user_id", "name", "balance", "client_id")
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *;
     `;
 
-  const { rows } = await client.query(sqlQuery, [id, user_id, name, balance]);
+  const { rows } = await client.query(sqlQuery, [id, user_id, name, balance, client_id]);
   
   return rows[0];
+};
+
+export const findAccountByClientId = async (clientId, userId, client = pool) => {
+  const sqlQuery = `
+        SELECT "id", "user_id", "name", "balance", "created_at", "updated_at", "client_id"
+        FROM "accounts"
+        WHERE "client_id" = $1 AND "user_id" = $2;
+    `;
+
+  const { rows } = await client.query(sqlQuery, [clientId, userId]);
+  return rows[0];
+};
+
+export const insertAccountByClientId = async (accountData, client = pool) => {
+  const { id, user_id, name, balance, client_id } = accountData;
+
+  const sqlQuery = `
+        INSERT INTO "accounts" ("id", "user_id", "name", "balance", "client_id")
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT ("user_id", "client_id") WHERE "client_id" IS NOT NULL
+        DO NOTHING
+        RETURNING *;
+    `;
+
+  const { rows } = await client.query(sqlQuery, [id, user_id, name, balance, client_id]);
+
+  if (rows[0]) {
+    return { row: rows[0], inserted: true };
+  }
+
+  const existing = await findAccountByClientId(client_id, user_id, client);
+  return { row: existing, inserted: false };
 };
 
 export const updateAccountById = async (accountData, client = pool) => {

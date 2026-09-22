@@ -77,17 +77,51 @@ export const findTransactionById = async (transactionId, userId, client = pool) 
 
 export const insertTransactionToDB = async (transactionPayload, client = pool) =>
 {
-  const { id, user_id, account_id, budget_id, type, amount, title, transaction_date } = transactionPayload;
+  const { id, user_id, account_id, budget_id, type, amount, title, transaction_date, client_id = null } = transactionPayload;
 
   const sqlQuery = `
-        INSERT INTO "transactions" ("id", "user_id", "account_id", "budget_id", "type", "amount", "title", "transaction_date")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO "transactions" ("id", "user_id", "account_id", "budget_id", "type", "amount", "title", "transaction_date", "client_id")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *;
     `;
 
-  const { rows } = await client.query(sqlQuery, [id, user_id, account_id, budget_id, type, amount, title, transaction_date]);
+  const { rows } = await client.query(sqlQuery, [id, user_id, account_id, budget_id, type, amount, title, transaction_date, client_id]);
 
   return rows[0];
+};
+
+export const findTransactionByClientId = async (clientId, userId, client = pool) =>
+{
+  const sqlQuery = `
+        SELECT "id", "user_id", "account_id", "budget_id", "type", "amount", "title", "transaction_date", "created_at", "updated_at", "client_id"
+        FROM "transactions"
+        WHERE "client_id" = $1 AND "user_id" = $2;
+    `;
+
+  const { rows } = await client.query(sqlQuery, [clientId, userId]);
+  return rows[0];
+};
+
+export const insertTransactionByClientId = async (transactionPayload, client = pool) =>
+{
+  const { id, user_id, account_id, budget_id, type, amount, title, transaction_date, client_id } = transactionPayload;
+
+  const sqlQuery = `
+        INSERT INTO "transactions" ("id", "user_id", "account_id", "budget_id", "type", "amount", "title", "transaction_date", "client_id")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT ("user_id", "client_id") WHERE "client_id" IS NOT NULL
+        DO NOTHING
+        RETURNING *;
+    `;
+
+  const { rows } = await client.query(sqlQuery, [id, user_id, account_id, budget_id, type, amount, title, transaction_date, client_id]);
+
+  if (rows[0]) {
+    return { row: rows[0], inserted: true };
+  }
+
+  const existing = await findTransactionByClientId(client_id, user_id, client);
+  return { row: existing, inserted: false };
 };
 
 export const updateTransactionById = async (transactionPayload, client = pool) =>

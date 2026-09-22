@@ -47,17 +47,59 @@ export const findBudgetById = async (budgetId, userId, client = pool) =>
 
 export const insertBudgetToDB = async (budgetPayload, client = pool) =>
 {
-  const { id, user_id, category_id, name, target_amount } = budgetPayload;
+  const { id, user_id, category_id, name, target_amount, client_id = null } = budgetPayload;
 
   const sqlQuery = `
-        INSERT INTO "budgets" ("id", "user_id", "category_id", "name", "target_amount")
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO "budgets" ("id", "user_id", "category_id", "name", "target_amount", "client_id")
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *;
     `;
 
-  const { rows } = await client.query(sqlQuery, [id, user_id, category_id, name, target_amount]);
+  const { rows } = await client.query(sqlQuery, [id, user_id, category_id, name, target_amount, client_id]);
 
   return rows[0];
+};
+
+export const findBudgetByClientId = async (clientId, userId, client = pool) =>
+{
+  const sqlQuery = `
+        SELECT "id", "user_id", "category_id", "name", "target_amount", "allocated_amount", "created_at", "updated_at", "client_id"
+        FROM "budgets"
+        WHERE "client_id" = $1 AND "user_id" = $2;
+    `;
+
+  const { rows } = await client.query(sqlQuery, [clientId, userId]);
+  return rows[0];
+};
+
+export const insertBudgetByClientId = async (budgetPayload, client = pool) =>
+{
+  const { id, user_id, category_id, name, target_amount, allocated_amount = 0, client_id } = budgetPayload;
+
+  const sqlQuery = `
+        INSERT INTO "budgets" ("id", "user_id", "category_id", "name", "target_amount", "allocated_amount", "client_id")
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT ("user_id", "client_id") WHERE "client_id" IS NOT NULL
+        DO NOTHING
+        RETURNING *;
+    `;
+
+  const { rows } = await client.query(sqlQuery, [
+    id,
+    user_id,
+    category_id,
+    name,
+    target_amount,
+    allocated_amount,
+    client_id,
+  ]);
+
+  if (rows[0]) {
+    return { row: rows[0], inserted: true };
+  }
+
+  const existing = await findBudgetByClientId(client_id, user_id, client);
+  return { row: existing, inserted: false };
 };
 
 export const updateBudgetById = async (budgetPayload) =>
